@@ -1,9 +1,16 @@
-Deployment Ready V4.1 — incremental update over V4.
+Deployment Ready V4.3 — Refinement and Feedback
 
-Changes:
-- Home: up to three unfinished next priorities, selected by saved departure date and branch-specific readiness tasks.
-- Timeline: current stage from existing Home target date; stages never auto-complete tasks.
-- Readiness: per-category progress bars, restore removed preset suggestions, and Home readiness count now reflects V4 categories.
-- Preserves existing localStorage keys, packing data, V3 reminders, and V4 task statuses.
-- No changes to manifest or icon files. Upload only the five included files to the ORIGINAL GitHub Pages repository.
-- Planning guidance only; follow official unit/command instructions.
+Updates:
+- Fixes the very light text on white background in Your Next Priorities, using high-contrast dark cards.
+- Adds a Send feedback link to the published Deployment Ready Google Form, available on all pages. Google Forms requires internet; responses are viewed by the form owner in Google Forms.
+- Adds a visible packing item count and clearer planning guidance.
+- Improves mobile tap targets, keyboard focus outlines, and readability.
+- Keeps V4.1 Home, Packing, Readiness, timeline, branch suggestions, and Not Applicable statuses.
+- Retains all existing localStorage keys and saved user data; no data reset or new permissions.
+- Updates cache version to v4-3.
+
+IMPORTANT: Upload only the five files in this ZIP to the ORIGINAL repository root. Do not overwrite the existing manifest or icon. Before uploading, export your backup.
+
+Feedback form: https://docs.google.com/forms/d/e/1FAIpQLSdePKBBciC2HTvjlbuUIUM2ggdsxUBD2Q_8v1AwhvHo2jNYBQ/viewform
+
+Not official military guidance. Follow command instructions and do not enter sensitive operational information.
