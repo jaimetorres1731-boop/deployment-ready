@@ -28,7 +28,7 @@ function readTasks(){try{const v=JSON.parse(localStorage.getItem(TASKS_KEY));if(
 let settings=readSettings(),tasks=readTasks();
 function saveExtra(){try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings));localStorage.setItem(TASKS_KEY,JSON.stringify(tasks));}catch(e){alert("Saving failed. Check browser storage.");}}
 function theme(){let t=THEMES[state.branch]||THEMES.Army;document.documentElement.style.setProperty("--accent",t[0]);document.documentElement.style.setProperty("--hero-a",t[1]);document.documentElement.style.setProperty("--hero-b",t[2]);document.querySelector('meta[name="theme-color"]').setAttribute("content",t[2]);}
-function showPage(page){if(page==="readiness"){activeReadinessCategory=null;renderReadiness();}["home","packing","readiness"].forEach(name=>{document.getElementById(name+"Page").hidden=name!==page;});document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("nav-active",b.dataset.page===page));window.scrollTo(0,0);}
+function showPage(page){if(page==="readiness"){activeReadinessCategory=null;renderReadiness();if(typeof closeStage2==="function")closeStage2();}["home","packing","readiness"].forEach(name=>{document.getElementById(name+"Page").hidden=name!==page;});document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("nav-active",b.dataset.page===page));window.scrollTo(0,0);}
 function durationDays(){let n=Number(settings.durationValue);if(!Number.isFinite(n)||n<1)return 0;let factor=settings.durationUnit==="days"?1:settings.durationUnit==="weeks"?7:30;return Math.min(3650,Math.round(n*factor));}
 function quantitySuggestion(name,category){
  const days=durationDays();if(!days)return "";
@@ -128,6 +128,7 @@ function options(select,values){values.forEach(v=>{let o=el("option","",v);o.val
 options($("newCategory"),CATEGORIES);options($("editCategory"),CATEGORIES);options($("newBag"),BAGS);options($("editBag"),BAGS);options($("bagFilter"),["All",...BAGS]);
 function render(){
  renderExtras();
+ if(typeof renderBranchResources==="function")renderBranchResources();
  $("branch").value=state.branch;$("bagFilter").value=bagFilter;
  let total=state.items.length,packed=state.items.filter(x=>x.packed).length,pct=total?Math.round(packed/total*100):0;
  $("percent").textContent=pct+"%";$("total").textContent=total;$("packed").textContent=packed;$("remaining").textContent=total-packed;$("progressBar").style.width=pct+"%";
@@ -185,11 +186,13 @@ document.querySelectorAll("[data-phase]").forEach(button=>button.onclick=()=>{
 $("targetDate").addEventListener("change",updatePhaseUI);
 $("clearDate").addEventListener("click",updatePhaseUI);
 updatePhaseUI();
-const BACKUP_KEYS=[KEY,SETTINGS_KEY,TASKS_KEY,READINESS_KEY,PHASE_KEY];
+const LEGACY_BACKUP_KEYS=[KEY,SETTINGS_KEY,TASKS_KEY,READINESS_KEY,PHASE_KEY];
+const FAMILY_KEY="deployment-ready-v5-family";
+const BACKUP_KEYS=[...LEGACY_BACKUP_KEYS,FAMILY_KEY];
 function getBackupData(){
  // Capture the actual stored JSON values without rewriting or migrating users' data.
  const data={};for(const key of BACKUP_KEYS){const value=localStorage.getItem(key);data[key]=value===null?null:(key===PHASE_KEY?value:JSON.parse(value));}
- return {format:"deployment-ready-full-backup",version:1,exportedAt:new Date().toISOString(),data};
+ return {format:"deployment-ready-full-backup",version:2,exportedAt:new Date().toISOString(),data};
 }
 function downloadFullBackup(){
  try{
@@ -206,11 +209,15 @@ function validReadinessBackup(v){
  if(!v||typeof v!=="object"||Array.isArray(v)||Object.keys(v).some(k=>!BRANCHES.includes(k)))return false;
  return Object.values(v).every(branch=>branch&&typeof branch==="object"&&!Array.isArray(branch)&&Object.entries(branch).every(([category,entries])=>Object.hasOwn(READINESS_CATEGORIES,category)&&Array.isArray(entries)&&entries.length<=500&&entries.every(t=>t&&typeof t.id==="string"&&t.id.length<=120&&typeof t.name==="string"&&t.name.length<=100&&["todo","done","na"].includes(t.status)&&typeof t.preset==="boolean"&&(t.removed===undefined||typeof t.removed==="boolean"))));
 }
+function validFamilyBackup(v){
+ return Array.isArray(v)&&v.length<=150&&v.every(t=>t&&typeof t.id==="string"&&t.id.length<=120&&typeof t.name==="string"&&t.name.length>0&&t.name.length<=100&&["todo","done","na"].includes(t.status)&&typeof t.preset==="boolean"&&(t.removed===undefined||typeof t.removed==="boolean"));
+}
 function validateFullBackup(b){
- if(!b||b.format!=="deployment-ready-full-backup"||b.version!==1||!b.data||typeof b.data!=="object"||Array.isArray(b.data))return false;
- if(Object.keys(b.data).length!==BACKUP_KEYS.length||BACKUP_KEYS.some(k=>!Object.hasOwn(b.data,k)))return false;
+ if(!b||b.format!=="deployment-ready-full-backup"||![1,2].includes(b.version)||!b.data||typeof b.data!=="object"||Array.isArray(b.data))return false;
+ const keys=b.version===1?LEGACY_BACKUP_KEYS:BACKUP_KEYS;
+ if(Object.keys(b.data).length!==keys.length||keys.some(k=>!Object.hasOwn(b.data,k)))return false;
  const d=b.data;
- return validState(d[KEY])&&(d[SETTINGS_KEY]===null||validSettingsBackup(d[SETTINGS_KEY]))&&(d[TASKS_KEY]===null||validTasksBackup(d[TASKS_KEY]))&&(d[READINESS_KEY]===null||validReadinessBackup(d[READINESS_KEY]))&&(d[PHASE_KEY]===null||PHASES.includes(d[PHASE_KEY]));
+ return validState(d[KEY])&&(d[SETTINGS_KEY]===null||validSettingsBackup(d[SETTINGS_KEY]))&&(d[TASKS_KEY]===null||validTasksBackup(d[TASKS_KEY]))&&(d[READINESS_KEY]===null||validReadinessBackup(d[READINESS_KEY]))&&(d[PHASE_KEY]===null||PHASES.includes(d[PHASE_KEY]))&&(b.version===1||d[FAMILY_KEY]===null||validFamilyBackup(d[FAMILY_KEY]));
 }
 let pendingRestore=null;
 function clearRestore(){pendingRestore=null;$("restorePreview").hidden=true;$("importAll").value="";}
@@ -221,7 +228,7 @@ $("importAll").onchange=async e=>{
   const parsed=JSON.parse(await file.text());if(!validateFullBackup(parsed))throw Error("invalid");
   pendingRestore=parsed;
   const d=parsed.data;
-  $("restoreDetails").textContent="Created: "+(typeof parsed.exportedAt==="string"?parsed.exportedAt.slice(0,10):"Unknown")+"\nBranch: "+d[KEY].branch+"\nPacking items: "+d[KEY].items.length+"\nLegacy reminders: "+(d[TASKS_KEY]?.length||0)+"\nReadiness: "+(d[READINESS_KEY]?"Included":"Not included")+"\nPhase: "+(d[PHASE_KEY]||"Preparing (default)");
+  $("restoreDetails").textContent="Created: "+(typeof parsed.exportedAt==="string"?parsed.exportedAt.slice(0,10):"Unknown")+"\nBranch: "+d[KEY].branch+"\nPacking items: "+d[KEY].items.length+"\nLegacy reminders: "+(d[TASKS_KEY]?.length||0)+"\nReadiness: "+(d[READINESS_KEY]?"Included":"Not included")+"\nPhase: "+(d[PHASE_KEY]||"Preparing (default)")+"\nFamily plan: "+(pendingRestore.version===1?"Older backup — current family plan will be kept":(d[FAMILY_KEY]?.length||0)+" items");
   $("restorePreview").hidden=false;$("backupStatus").textContent="Valid backup loaded. Nothing has been replaced yet.";
  }catch(err){$("backupStatus").textContent="Invalid or unsupported full backup. Your current data is unchanged.";}
 };
@@ -233,10 +240,77 @@ $("confirmRestore").onclick=()=>{
  const previous={};
  try{
   for(const k of BACKUP_KEYS)previous[k]=localStorage.getItem(k);
-  for(const k of BACKUP_KEYS){const value=pendingRestore.data[k];if(value===null)localStorage.removeItem(k);else localStorage.setItem(k,k===PHASE_KEY?value:JSON.stringify(value));}
+  for(const k of (pendingRestore.version===1?LEGACY_BACKUP_KEYS:BACKUP_KEYS)){const value=pendingRestore.data[k];if(value===null)localStorage.removeItem(k);else localStorage.setItem(k,k===PHASE_KEY?value:JSON.stringify(value));}
   clearRestore();alert("Backup restored successfully. The app will reload now.");location.reload();
  }catch(err){
   try{for(const k of BACKUP_KEYS){if(previous[k]===null)localStorage.removeItem(k);else if(previous[k]!==undefined)localStorage.setItem(k,previous[k]);}}catch(rollbackError){}
   $("backupStatus").textContent="Restore failed. We attempted to preserve the previous data. Please check your information.";
  }
 };
+
+
+// V5 Stage 2: branch-filtered official links and privacy-first family reminders.
+const BRANCH_RESOURCES={
+ "Army":[["Integrated Personnel and Pay System – Army (IPPS-A)","Army personnel and pay records.","https://ipps-a.army.mil/"],["U.S. Army Human Resources Command","Personnel information and services.","https://www.hrc.army.mil/"]],
+ "Marine Corps":[["Marine Corps Manpower & Reserve Affairs","Official Marine Corps personnel and reserve information.","https://www.manpower.usmc.mil/"],["U.S. Marine Corps","Official service information and updates.","https://www.marines.mil/"]],
+ "Navy":[["MyNavy HR","Navy personnel, careers, and benefits information.","https://www.mynavyhr.navy.mil/"],["MyNavy Portal","Navy personnel self-service resources.","https://my.navy.mil/"]],
+ "Air Force":[["myFSS","Air Force personnel services and support.","https://myfss.us.af.mil/"],["Air Force Personnel Center","Personnel policies and service resources.","https://www.afpc.af.mil/"]],
+ "Space Force":[["U.S. Space Force","Official Guardian news, information, and service updates.","https://www.spaceforce.mil/"],["Department of the Air Force Personnel Center","Personnel guidance and services relevant to Guardians; verify access and eligibility.","https://www.afpc.af.mil/"]],
+ "Coast Guard":[["Coast Guard Personnel Service Center","Coast Guard personnel and administrative resources.","https://www.dcms.uscg.mil/psc/"],["U.S. Coast Guard","Official service news and information.","https://www.uscg.mil/"]]
+};
+const SHARED_RESOURCES=[
+ ["Military OneSource","Military and family support, deployment planning, and counseling.","https://www.militaryonesource.mil/"],
+ ["Military & Family Life Counseling","Learn about counseling support for eligible service members and families.","https://www.militaryonesource.mil/benefits/military-family-life-counseling-program/"],
+ ["Family & Caregiver Deployment Guide","Official guidance for caregiver arrangements and family care planning.","https://www.militaryonesource.mil/resources/millife-guides/caregiver-support-during-military-deployment/"],
+ ["Military Crisis Line","Crisis support: call 988 and press 1, or text 838255 (U.S.).","https://www.veteranscrisisline.net/get-help-now/military-crisis-line/"],
+ ["Defense Finance and Accounting Service","Official military pay information and services; availability varies by service.","https://www.dfas.mil/"]
+];
+function resourceCard(item){
+ const card=el("div","resource-card"),link=el("a","resource-link",item[0]+" ↗");
+ link.href=item[2];link.target="_blank";link.rel="noopener noreferrer";
+ card.append(link,el("p","muted",item[1]));return card;
+}
+function renderBranchResources(){
+ const branch=BRANCHES.includes(state.branch)?state.branch:"Army";
+ $("branchResourcesTitle").textContent=branch+" resources";
+ $("branchResourcesList").replaceChildren(...BRANCH_RESOURCES[branch].map(resourceCard));
+ $("sharedResourcesList").replaceChildren(...SHARED_RESOURCES.map(resourceCard));
+}
+const FAMILY_SUGGESTIONS=[
+ "Confirm your emergency contact arrangements outside this app",
+ "Discuss a family communication plan for time apart",
+ "Review caregiver or dependent-care arrangements if applicable",
+ "Review any service-required Family Care Plan with your command",
+ "Review relevant legal paperwork with military legal assistance",
+ "Arrange household bills and essential responsibilities",
+ "Review pet or property care arrangements if applicable",
+ "Make sure loved ones know how to reach official family support services",
+ "Discuss how to handle unexpected emergencies while away"
+];
+function familyDefault(){return FAMILY_SUGGESTIONS.map((name,i)=>({id:"family-preset-"+i,name,status:"todo",preset:true}));}
+function readFamily(){try{const raw=localStorage.getItem(FAMILY_KEY);if(raw!==null){const parsed=JSON.parse(raw);if(validFamilyBackup(parsed))return parsed;}}catch(e){}return familyDefault();}
+let familyTasks=readFamily();
+function saveFamily(){try{localStorage.setItem(FAMILY_KEY,JSON.stringify(familyTasks));$("familySaveStatus").textContent="Saved on this device.";}catch(e){$("familySaveStatus").textContent="Could not save changes. Check available browser storage.";}}
+function renderFamily(){
+ const list=$("familyChecklist");list.replaceChildren();
+ const visible=familyTasks.filter(t=>!t.removed),done=visible.filter(t=>t.status==="done").length,applicable=visible.filter(t=>t.status!=="na").length;
+ $("familyProgress").textContent=done+" of "+applicable+" applicable reminders completed";
+ visible.forEach(t=>{
+  const row=el("div","readiness-task"),info=el("div","readiness-task-info");info.append(el("strong","",t.name));
+  const controls=el("div","readiness-controls"),select=el("select");select.setAttribute("aria-label","Status for "+t.name);
+  [["todo","To Do"],["done","Completed"],["na","Not Applicable"]].forEach(([v,label])=>{const option=el("option","",label);option.value=v;select.append(option);});
+  select.value=t.status;select.onchange=()=>{t.status=select.value;saveFamily();renderFamily();};
+  const remove=el("button","delete","×");remove.type="button";remove.setAttribute("aria-label","Remove "+t.name);
+  remove.onclick=()=>{if(!confirm("Remove this reminder?"))return;if(t.preset)t.removed=true;else familyTasks=familyTasks.filter(x=>x.id!==t.id);saveFamily();renderFamily();};
+  controls.append(select,remove);row.append(info,controls);list.append(row);
+ });
+}
+function closeStage2(){["stage2Family","stage2Resources"].forEach(id=>$(id).hidden=true);$("readinessStage2Shortcuts").hidden=false;$("readinessDashboard").hidden=false;$("readinessDetail").hidden=!!activeReadinessCategory;}
+function openStage2(section){showPage("readiness");$("stage2Family").hidden=section!=="family";$("stage2Resources").hidden=section!=="resources";$("readinessDashboard").hidden=true;$("readinessDetail").hidden=true;$("readinessStage2Shortcuts").hidden=true;if(section==="family")renderFamily();else renderBranchResources();window.scrollTo(0,0);}
+$("openFamily").onclick=()=>openStage2("family");
+$("openResources").onclick=()=>openStage2("resources");
+document.querySelectorAll("[data-stage2-open]").forEach(button=>button.onclick=()=>openStage2(button.dataset.stage2Open));
+document.querySelectorAll("[data-stage2-back]").forEach(button=>button.onclick=()=>{closeStage2();window.scrollTo(0,0);});
+$("familyAddForm").onsubmit=e=>{e.preventDefault();const name=$("familyNewTask").value.trim();if(!name||name.length>100||familyTasks.length>=150)return;familyTasks.push({id:newId(),name,status:"todo",preset:false});$("familyNewTask").value="";saveFamily();renderFamily();};
+$("familyRestore").onclick=()=>{let count=0;for(const t of familyTasks){if(t.preset&&t.removed){t.removed=false;t.status="todo";count++;}}if(!count){alert("No removed suggestions to restore.");return;}saveFamily();renderFamily();};
+renderBranchResources();renderFamily();

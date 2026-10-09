@@ -21,3 +21,10 @@ This is a development-branch build, not a public V5 release. Adds manual phase s
 
 ## Stage 1 backup hotfix
 Fixed backup export and restore of the plain-text deployment phase. No existing data keys were changed.
+
+
+## V5 Stage 2 (2026-10-09)
+- Resources automatically filter to the selected service branch; shared military/family resources remain visible to all.
+- Adds a separate privacy-first family preparation checklist without modifying V4 readiness tasks.
+- Full backups are now version 2 and include family checklist data. Restore still accepts Stage 1 version 1 backups and preserves current family data when importing an older backup.
+- Branch links are informational and require internet; verify official requirements with your command.
