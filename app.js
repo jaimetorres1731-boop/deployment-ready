@@ -188,7 +188,7 @@ updatePhaseUI();
 const BACKUP_KEYS=[KEY,SETTINGS_KEY,TASKS_KEY,READINESS_KEY,PHASE_KEY];
 function getBackupData(){
  // Capture the actual stored JSON values without rewriting or migrating users' data.
- const data={};for(const key of BACKUP_KEYS){const value=localStorage.getItem(key);data[key]=value===null?null:JSON.parse(value);}
+ const data={};for(const key of BACKUP_KEYS){const value=localStorage.getItem(key);data[key]=value===null?null:(key===PHASE_KEY?value:JSON.parse(value));}
  return {format:"deployment-ready-full-backup",version:1,exportedAt:new Date().toISOString(),data};
 }
 function downloadFullBackup(){
@@ -233,7 +233,7 @@ $("confirmRestore").onclick=()=>{
  const previous={};
  try{
   for(const k of BACKUP_KEYS)previous[k]=localStorage.getItem(k);
-  for(const k of BACKUP_KEYS){const value=pendingRestore.data[k];if(value===null)localStorage.removeItem(k);else localStorage.setItem(k,JSON.stringify(value));}
+  for(const k of BACKUP_KEYS){const value=pendingRestore.data[k];if(value===null)localStorage.removeItem(k);else localStorage.setItem(k,k===PHASE_KEY?value:JSON.stringify(value));}
   clearRestore();alert("Backup restored successfully. The app will reload now.");location.reload();
  }catch(err){
   try{for(const k of BACKUP_KEYS){if(previous[k]===null)localStorage.removeItem(k);else if(previous[k]!==undefined)localStorage.setItem(k,previous[k]);}}catch(rollbackError){}

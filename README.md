@@ -18,3 +18,6 @@ Not official military guidance. Follow command instructions and do not enter sen
 
 ## V5 Stage 1 development build
 This is a development-branch build, not a public V5 release. Adds manual phase selection and versioned full-data backup/restore. Test using a separate browser profile before releasing. The existing packing-only import/export remains available.
+
+## Stage 1 backup hotfix
+Fixed backup export and restore of the plain-text deployment phase. No existing data keys were changed.
