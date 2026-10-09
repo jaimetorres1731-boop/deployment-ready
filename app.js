@@ -162,3 +162,81 @@ $("clearDate").onclick=()=>{settings.date="";saveExtra();renderExtras();};
 $("saveDuration").onclick=()=>{let raw=$("durationValue").value.trim(),n=Number(raw);if(raw&&(!Number.isInteger(n)||n<1||n>120)){alert("Enter a whole number from 1 to 120, or leave it blank.");return;}settings.durationValue=raw? n:"";settings.durationUnit=$("durationUnit").value;saveExtra();renderDuration();render();};
 renderDuration();
 showPage("home");saveExtra();renderExtras();
+
+
+// V5 Stage 1: explicit phase selection and versioned, local full backups.
+const PHASE_KEY="deployment-ready-v5-phase";
+const PHASES=["preparing","deployed","returning"];
+function loadPhase(){try{const p=localStorage.getItem(PHASE_KEY);return PHASES.includes(p)?p:"preparing";}catch(e){return "preparing";}}
+let deploymentPhase=loadPhase();
+function updatePhaseUI(){
+ document.querySelectorAll("[data-phase]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.phase===deploymentPhase)));
+ let msg="You are viewing the "+({preparing:"Preparing",deployed:"Deployed",returning:"Returning"}[deploymentPhase])+" phase. All your existing checklists remain available.";
+ if(settings.date&&/^\d{4}-\d{2}-\d{2}$/.test(settings.date)){
+  const d=new Date(settings.date+"T00:00:00");
+  if(!Number.isNaN(d.getTime())&&d<new Date()&&deploymentPhase==="preparing")msg+=" Your target date has passed; switch phases when you're ready.";
+ }
+ $("phaseStatus").textContent=msg;
+}
+document.querySelectorAll("[data-phase]").forEach(button=>button.onclick=()=>{
+ const phase=button.dataset.phase;if(!PHASES.includes(phase))return;
+ try{localStorage.setItem(PHASE_KEY,phase);deploymentPhase=phase;updatePhaseUI();}catch(e){alert("Could not save your deployment phase. Check device storage.");}
+});
+$("targetDate").addEventListener("change",updatePhaseUI);
+$("clearDate").addEventListener("click",updatePhaseUI);
+updatePhaseUI();
+const BACKUP_KEYS=[KEY,SETTINGS_KEY,TASKS_KEY,READINESS_KEY,PHASE_KEY];
+function getBackupData(){
+ // Capture the actual stored JSON values without rewriting or migrating users' data.
+ const data={};for(const key of BACKUP_KEYS){const value=localStorage.getItem(key);data[key]=value===null?null:JSON.parse(value);}
+ return {format:"deployment-ready-full-backup",version:1,exportedAt:new Date().toISOString(),data};
+}
+function downloadFullBackup(){
+ try{
+  const json=JSON.stringify(getBackupData(),null,2),blob=new Blob([json],{type:"application/json"});
+  const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="deployment-ready-full-backup-"+new Date().toISOString().slice(0,10)+".json";
+  document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  $("backupStatus").textContent="Backup download requested. Check your Downloads or Files app.";
+ }catch(e){$("backupStatus").textContent="Backup could not be created. No data was changed.";}
+}
+$("exportAll").onclick=downloadFullBackup;
+function validSettingsBackup(v){return v&&typeof v==="object"&&!Array.isArray(v)&&typeof v.date==="string"&&v.date.length<=10&&(v.durationValue===""||(Number.isInteger(v.durationValue)&&v.durationValue>=1&&v.durationValue<=120))&&["days","weeks","months"].includes(v.durationUnit);}
+function validTasksBackup(v){return Array.isArray(v)&&v.length<=1000&&v.every(t=>t&&typeof t.id==="string"&&t.id.length<=120&&typeof t.name==="string"&&t.name.length<=100&&typeof t.done==="boolean");}
+function validReadinessBackup(v){
+ if(!v||typeof v!=="object"||Array.isArray(v)||Object.keys(v).some(k=>!BRANCHES.includes(k)))return false;
+ return Object.values(v).every(branch=>branch&&typeof branch==="object"&&!Array.isArray(branch)&&Object.entries(branch).every(([category,entries])=>Object.hasOwn(READINESS_CATEGORIES,category)&&Array.isArray(entries)&&entries.length<=500&&entries.every(t=>t&&typeof t.id==="string"&&t.id.length<=120&&typeof t.name==="string"&&t.name.length<=100&&["todo","done","na"].includes(t.status)&&typeof t.preset==="boolean"&&(t.removed===undefined||typeof t.removed==="boolean"))));
+}
+function validateFullBackup(b){
+ if(!b||b.format!=="deployment-ready-full-backup"||b.version!==1||!b.data||typeof b.data!=="object"||Array.isArray(b.data))return false;
+ if(Object.keys(b.data).length!==BACKUP_KEYS.length||BACKUP_KEYS.some(k=>!Object.hasOwn(b.data,k)))return false;
+ const d=b.data;
+ return validState(d[KEY])&&(d[SETTINGS_KEY]===null||validSettingsBackup(d[SETTINGS_KEY]))&&(d[TASKS_KEY]===null||validTasksBackup(d[TASKS_KEY]))&&(d[READINESS_KEY]===null||validReadinessBackup(d[READINESS_KEY]))&&(d[PHASE_KEY]===null||PHASES.includes(d[PHASE_KEY]));
+}
+let pendingRestore=null;
+function clearRestore(){pendingRestore=null;$("restorePreview").hidden=true;$("importAll").value="";}
+$("importAll").onchange=async e=>{
+ const file=e.target.files[0];clearRestore();if(!file)return;
+ try{
+  if(file.size>3000000)throw Error("too large");
+  const parsed=JSON.parse(await file.text());if(!validateFullBackup(parsed))throw Error("invalid");
+  pendingRestore=parsed;
+  const d=parsed.data;
+  $("restoreDetails").textContent="Created: "+(typeof parsed.exportedAt==="string"?parsed.exportedAt.slice(0,10):"Unknown")+"\nBranch: "+d[KEY].branch+"\nPacking items: "+d[KEY].items.length+"\nLegacy reminders: "+(d[TASKS_KEY]?.length||0)+"\nReadiness: "+(d[READINESS_KEY]?"Included":"Not included")+"\nPhase: "+(d[PHASE_KEY]||"Preparing (default)");
+  $("restorePreview").hidden=false;$("backupStatus").textContent="Valid backup loaded. Nothing has been replaced yet.";
+ }catch(err){$("backupStatus").textContent="Invalid or unsupported full backup. Your current data is unchanged.";}
+};
+$("backupBeforeRestore").onclick=downloadFullBackup;
+$("cancelRestore").onclick=()=>{clearRestore();$("backupStatus").textContent="Restore canceled. Your data is unchanged.";};
+$("confirmRestore").onclick=()=>{
+ if(!pendingRestore||!validateFullBackup(pendingRestore))return;
+ if(!confirm("Replace your current Deployment Ready data with this backup? This cannot be undone unless you saved a separate backup."))return;
+ const previous={};
+ try{
+  for(const k of BACKUP_KEYS)previous[k]=localStorage.getItem(k);
+  for(const k of BACKUP_KEYS){const value=pendingRestore.data[k];if(value===null)localStorage.removeItem(k);else localStorage.setItem(k,JSON.stringify(value));}
+  clearRestore();alert("Backup restored successfully. The app will reload now.");location.reload();
+ }catch(err){
+  try{for(const k of BACKUP_KEYS){if(previous[k]===null)localStorage.removeItem(k);else if(previous[k]!==undefined)localStorage.setItem(k,previous[k]);}}catch(rollbackError){}
+  $("backupStatus").textContent="Restore failed. We attempted to preserve the previous data. Please check your information.";
+ }
+};

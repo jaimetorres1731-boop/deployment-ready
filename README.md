@@ -14,3 +14,7 @@ IMPORTANT: Upload only the five files in this ZIP to the ORIGINAL repository roo
 Feedback form: https://docs.google.com/forms/d/e/1FAIpQLSdePKBBciC2HTvjlbuUIUM2ggdsxUBD2Q_8v1AwhvHo2jNYBQ/viewform
 
 Not official military guidance. Follow command instructions and do not enter sensitive operational information.
+
+
+## V5 Stage 1 development build
+This is a development-branch build, not a public V5 release. Adds manual phase selection and versioned full-data backup/restore. Test using a separate browser profile before releasing. The existing packing-only import/export remains available.
