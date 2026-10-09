@@ -126,9 +126,10 @@ function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){al
 function el(tag,cls,text){let e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
 function options(select,values){values.forEach(v=>{let o=el("option","",v);o.value=v;select.append(o);});}
 options($("newCategory"),CATEGORIES);options($("editCategory"),CATEGORIES);options($("newBag"),BAGS);options($("editBag"),BAGS);options($("bagFilter"),["All",...BAGS]);
+let stage2Ready=false;
 function render(){
  renderExtras();
- if(typeof renderBranchResources==="function")renderBranchResources();
+ if(stage2Ready)renderBranchResources();
  $("branch").value=state.branch;$("bagFilter").value=bagFilter;
  let total=state.items.length,packed=state.items.filter(x=>x.packed).length,pct=total?Math.round(packed/total*100):0;
  $("percent").textContent=pct+"%";$("total").textContent=total;$("packed").textContent=packed;$("remaining").textContent=total-packed;$("progressBar").style.width=pct+"%";
@@ -313,4 +314,4 @@ document.querySelectorAll("[data-stage2-open]").forEach(button=>button.onclick=(
 document.querySelectorAll("[data-stage2-back]").forEach(button=>button.onclick=()=>{closeStage2();window.scrollTo(0,0);});
 $("familyAddForm").onsubmit=e=>{e.preventDefault();const name=$("familyNewTask").value.trim();if(!name||name.length>100||familyTasks.length>=150)return;familyTasks.push({id:newId(),name,status:"todo",preset:false});$("familyNewTask").value="";saveFamily();renderFamily();};
 $("familyRestore").onclick=()=>{let count=0;for(const t of familyTasks){if(t.preset&&t.removed){t.removed=false;t.status="todo";count++;}}if(!count){alert("No removed suggestions to restore.");return;}saveFamily();renderFamily();};
-renderBranchResources();renderFamily();
+stage2Ready=true;renderBranchResources();renderFamily();
